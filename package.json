@@ -1,0 +1,12 @@
+{
+  "name": "yunzai-server-status",
+  "version": "1.0.0",
+  "description": "云崽主人专用宿主机资源、存储、插件和服务状态图片",
+  "type": "module",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "author": "719083594",
+  "repository": { "type": "git", "url": "https://github.com/719083594/yunzai-server-status.git" },
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test tests/*.test.mjs" },
+  "files": ["index.js", "lib", "collector/collector.py", "collector/config.example.json", "config/plugin.example.json", "scripts/install.py", "scripts/diagnose.py", "docs", "README.md", "LICENSE", "NOTICE", "SECURITY.md", "CHANGELOG.md"]
+}

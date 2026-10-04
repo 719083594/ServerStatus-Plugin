@@ -1,0 +1,15 @@
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+config/plugin.json
+collector/config.json
+data/
+*.log
+*.db
+*.sqlite*
+*.pem
+*.key
+.env*
+dist/
+coverage/

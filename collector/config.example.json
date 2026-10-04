@@ -1,0 +1,10 @@
+{
+  "yunzaiRoot": "/srv/yunzai",
+  "ipcDirectory": "/srv/yunzai/data/yunzai-server-status",
+  "fontPath": null,
+  "dockerMode": "auto",
+  "containers": [],
+  "storageDirectories": [],
+  "storageCacheSeconds": 60,
+  "programCacheSeconds": 3600
+}
