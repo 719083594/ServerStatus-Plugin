@@ -8,7 +8,7 @@ export function supportGuoba() {
   return {
     pluginInfo: {
       name: path.basename(directory).toLowerCase(),
-      title: 'ServerStatus-Plugin',
+      title: '服务器状态',
       author: '@719083594',
       authorLink: 'https://github.com/719083594',
       link: 'https://github.com/719083594/ServerStatus-Plugin',

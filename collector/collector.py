@@ -16,19 +16,19 @@ def configure(config, require_font=True):
     CONFIG=config
     ROOT=Path(config.get('applicationRoot') or config.get('yunzaiRoot') or Path.cwd()).expanduser().resolve()
     DIRECTORY=Path(config.get('ipcDirectory') or ROOT/'data/server-status').expanduser().resolve()
-    if not ROOT.is_dir():raise ValueError('applicationRoot is not a directory')
+    if not ROOT.is_dir():raise ValueError('应用根目录（applicationRoot）不存在或不是文件夹')
     candidates=[config.get('fontPath'),'/usr/share/fonts/truetype/wqy/wqy-microhei.ttc','/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc','/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc']
     FONT=next((str(p) for p in candidates if p and Path(p).is_file()),None)
     if require_font:
         from PIL import ImageFont
-        if not FONT:raise ValueError('Chinese font missing; install fonts-wqy-microhei or set fontPath')
+        if not FONT:raise ValueError('未找到中文字体，请安装 fonts-wqy-microhei 或配置字体路径（fontPath）')
         ImageFont.truetype(FONT,24)
     mode=config.get('dockerMode','auto')
-    if mode not in ('auto','selected','off'):raise ValueError('Invalid dockerMode')
+    if mode not in ('auto','selected','off'):raise ValueError('容器监测模式（dockerMode）无效')
     CONTAINERS={}
     for item in config.get('containers',[])[:30]:
         name=item.get('name','')
-        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,100}',name):raise ValueError('Invalid container name')
+        if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,100}',name):raise ValueError('容器名称无效')
         CONTAINERS[name]=str(item.get('label',name))[:40]
     storage_cache=None
 storage_cache=None
@@ -101,7 +101,7 @@ def storage():
         try:dirs.append({'label':label,'bytes':int(run(['du','-sx','-B1','--',str(directory)],3).split()[0])})
         except Exception:dirs.append({'label':label,'bytes':None})
     try:
-        if CONFIG.get('dockerMode','auto')=='off':raise ValueError('Docker disabled')
+        if CONFIG.get('dockerMode','auto')=='off':raise ValueError('未启用容器监测')
         docker=[json.loads(s) for s in run(['docker','system','df','--format','{{json .}}'],4).splitlines()]
     except Exception:docker=[]
     cleanup={'enabled':CONFIG.get('cleanup',{}).get('enabled',False),'scheduleTime':CONFIG.get('cleanup',{}).get('scheduleTime','03:30')}
@@ -131,7 +131,7 @@ def services():
 
 def plugins(runtime):
     rows=[]
-    names={'system':'TRSS 系统功能','adapter':'OneBot 适配器','other':'TRSS 辅助功能','example':'示例插件','chatgpt-plugin':'ChatGPT 插件','Guoba-Plugin':'锅巴管理面板','ServerStatus-Plugin':'服务器状态图片'}
+    names={'system':'TRSS 系统功能','adapter':'OneBot 适配器','other':'TRSS 辅助功能','example':'示例插件','chatgpt-plugin':'GPT 聊天插件','Guoba-Plugin':'锅巴管理面板','ServerStatus-Plugin':'服务器状态','WebSearch-Plugin':'联网搜索','OrangeJuice-Plugin':'橙汁管理平台','AI-Plugin':'AI 聊天'}
     for item in runtime.get('plugins',[])[:50]:
         name=str(item.get('name',''))
         if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',name):continue
@@ -144,11 +144,11 @@ def plugins(runtime):
     return rows
 
 def collect(request):
-    if sys.platform!='linux':raise ValueError('Host metrics require Linux')
+    if sys.platform!='linux':raise ValueError('宿主机状态采集仅支持 Linux')
     start=cpu_ticks();time.sleep(0.65);cpu=cpu_percent(start,cpu_ticks())
     runtime=request.get('runtime',{});kind=request['kind']
-    if kind not in KINDS:raise ValueError('Invalid panel')
-    if not isinstance(runtime,dict):raise ValueError('runtime must be an object')
+    if kind not in KINDS:raise ValueError('未知面板')
+    if not isinstance(runtime,dict):raise ValueError('应用运行信息（runtime）必须是对象')
     uptime=float(Path('/proc/uptime').read_text().split()[0]);loads=os.getloadavg()
     data={'cpuPercent':cpu,'cores':os.cpu_count(),'memory':memory(),'uptime':uptime,'load':list(loads),'runtime':runtime}
     if kind in {'all','storage'}:data['storage']=storage()
@@ -171,7 +171,7 @@ class Dashboard:
         def font(px):return ImageFont.truetype(FONT,px)
         def text(xy,value,px=24,fill='#35465a'):draw.text(xy,value,font=font(px),fill=fill)
         draw.rounded_rectangle((28,28,1052,172),radius=24,fill='#162d49')
-        text((60,47),self.title,40,'#ffffff');text((62,110),'Linux 宿主机 · ServerStatus-Plugin',24,'#a4c7ec')
+        text((60,47),self.title,40,'#ffffff');text((62,110),'Linux 宿主机 · 服务器状态',24,'#a4c7ec')
         text((710,116),self.generated,21,'#a4c7ec')
         for typ,args in self.items:
             if typ=='section':
@@ -195,7 +195,7 @@ def render(data,kind,target):
         y=d.section('核心资源 · CPU 为全部核心平均占用',260)
         d.gauge((56,y+65),'CPU',data['cpuPercent'],f"{data['cores']} 核 · 0.65秒采样")
         d.gauge((386,y+65),'物理内存',m['percent'],f"{size(m['used'])} / {size(m['total'])}")
-        d.gauge((716,y+65),'Swap',m['swapPercent'],f"{size(m['swapUsed'])} / {size(m['swapTotal'])}")
+        d.gauge((716,y+65),'交换内存',m['swapPercent'],f"{size(m['swapUsed'])} / {size(m['swapTotal'])}")
         y=d.section('运行信息',215)
         d.text((56,y+68),f"服务器已运行：{duration(data['uptime'])}       应用：{duration(r.get('botUptime'))}")
         d.text((56,y+110),f"连接：{connection(r.get('connected'))}    Node {r.get('nodeVersion','未知')}    系统负载：{' / '.join(f'{n:.2f}' for n in data['load'])}",23)
@@ -248,13 +248,13 @@ def write_json(name,data):
     tmp=DIRECTORY/(name+'.tmp');tmp.write_text(json.dumps(data,ensure_ascii=False),encoding='utf8');os.chmod(tmp,0o660);tmp.replace(DIRECTORY/name)
 def process(request):
     identifier=request.get('id','');kind=request.get('kind')
-    if not re.fullmatch(r'[0-9a-f-]{36}',identifier) or kind not in KINDS:raise ValueError('Invalid request')
+    if not re.fullmatch(r'[0-9a-f-]{36}',identifier) or kind not in KINDS:raise ValueError('状态采集请求无效')
     if abs(time.time()*1000-request.get('requestedAt',0))>15000:return
     try:
         data=collect(request);dimensions=render(data,kind,DIRECTORY/'dashboard.png')
         write_json('response.json',{'id':identifier,'kind':kind,'generatedAt':int(time.time()*1000),'dimensions':dimensions,'details':data})
     except Exception as exc:
-        print('collector:',type(exc).__name__,flush=True)
+        print('状态采集器：',type(exc).__name__,flush=True)
         write_json('response.json',{'id':identifier,'kind':kind,'error':type(exc).__name__})
 def main():
     DIRECTORY.mkdir(parents=True,exist_ok=True,mode=0o2770)
@@ -265,13 +265,15 @@ def main():
             if p.exists() and p.stat().st_size<100000:
                 request=json.loads(p.read_text());identifier=request.get('id')
                 if identifier!=last:last=identifier;process(request)
-        except Exception as exc:print('collector:',type(exc).__name__,flush=True)
+        except Exception as exc:print('状态采集器：',type(exc).__name__,flush=True)
         time.sleep(0.3)
 if __name__=='__main__':
     import argparse
-    parser=argparse.ArgumentParser(description='ServerStatus on-demand Linux host image collector')
-    parser.add_argument('--config',type=Path,required=True)
-    parser.add_argument('--once',action='store_true',help='Process one request and exit')
+    parser=argparse.ArgumentParser(description='按需采集 Linux 宿主机状态并生成图片',add_help=False)
+    parser.add_argument('-h','--help',action='help',help='显示帮助并退出')
+    parser._optionals.title='可选参数'
+    parser.add_argument('--config',type=Path,required=True,help='采集器配置文件')
+    parser.add_argument('--once',action='store_true',help='处理一次请求后退出')
     args=parser.parse_args()
     configure(json.loads(args.config.read_text(encoding='utf-8')))
     DIRECTORY.mkdir(parents=True,exist_ok=True,mode=0o2770)

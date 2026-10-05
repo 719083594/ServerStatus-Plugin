@@ -13,6 +13,6 @@ test('owner proof must be a trusted boolean',async()=>{
   assert.equal(calls,0)
 })
 test('direct snapshot rejects malformed arguments before starting a process',async()=>{
-  await assert.rejects(collectSnapshot({kind:'shell'}),/Unknown panel/)
-  await assert.rejects(collectSnapshot({format:'png'}),/output path required/)
+  await assert.rejects(collectSnapshot({kind:'shell'}),/未知面板/)
+  await assert.rejects(collectSnapshot({format:'png'}),/输出路径/)
 })

@@ -1,4 +1,4 @@
-"""Opt-in host cleanup. Fixed Docker commands and narrowly scoped cache files."""
+"""可选宿主机缓存清理，仅使用固定命令和指定缓存目录。"""
 import argparse
 import json
 import os
@@ -23,14 +23,14 @@ def settings(config):
     value = {**DEFAULTS, **config.get('cleanup', {})}
     for key in ('enabled', 'pruneUnusedImages', 'pruneBuildCache', 'cleanTemporaryFiles', 'cleanRotatedLogs'):
         if type(value[key]) is not bool:
-            raise ValueError('Invalid cleanup boolean: ' + key)
+            raise ValueError('清理开关必须是 true 或 false：' + key)
     for key in ('imageAgeHours', 'buildCacheAgeHours', 'temporaryMaxAgeHours', 'rotatedLogMaxAgeHours'):
         if type(value[key]) is not int or not 24 <= value[key] <= 87600:
-            raise ValueError('Cleanup retention must be 24..87600 hours: ' + key)
+            raise ValueError('清理保留时间必须为 24–87600 小时：' + key)
     if type(value['buildCacheKeepGB']) is not int or not 0 <= value['buildCacheKeepGB'] <= 100:
-        raise ValueError('Invalid buildCacheKeepGB')
+        raise ValueError('构建缓存保留容量（buildCacheKeepGB）必须为 0–100 GB')
     if not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', value['scheduleTime']):
-        raise ValueError('Invalid cleanup scheduleTime')
+        raise ValueError('清理时间（scheduleTime）必须为有效的 时:分')
     return value
 
 
@@ -49,9 +49,9 @@ def checked_directory(path):
     path = Path(os.path.abspath(path))
     for component in reversed([path, *path.parents]):
         if component.is_symlink():
-            raise ValueError('Cleanup directory contains a symlink')
+            raise ValueError('清理目录包含符号链接，已停止清理')
     if not path.is_dir():
-        raise ValueError('Cleanup directory missing')
+        raise ValueError('清理目录不存在')
     return path
 
 
@@ -100,14 +100,14 @@ def execute(args):
 
 def run_cleanup(config, apply=False, runner=execute, now=None):
     if sys.platform != 'linux':
-        raise ValueError('Cleanup requires the Linux host')
+        raise ValueError('缓存清理只能在 Linux 宿主机运行')
     value = settings(config)
     root = checked_directory(config.get('applicationRoot') or config.get('yunzaiRoot'))
     ipc = checked_directory(config['ipcDirectory'])
     if root == Path(root.anchor):
-        raise ValueError('Refusing cleanup at the filesystem root')
+        raise ValueError('禁止将文件系统根目录作为清理范围')
     if apply and not value['enabled']:
-        raise ValueError('Cleanup is not enabled in local configuration')
+        raise ValueError('本地配置尚未启用清理')
     now = time.time() if now is None else now
     report = {'startedAt': int(now * 1000), 'dryRun': not apply, 'filesDeleted': 0,
               'fileBytes': 0, 'docker': [], 'errors': [], 'scheduleTime': value['scheduleTime']}
@@ -120,7 +120,7 @@ def run_cleanup(config, apply=False, runner=execute, now=None):
                     options = runner(['docker', 'builder', 'prune', '--help'])
                     if '--keep-storage' not in options:
                         if '--max-used-space' not in options:
-                            raise ValueError('Unsupported Docker build cache retention options')
+                            raise ValueError('当前 Docker 不支持所需的构建缓存保留选项')
                         command = ['--max-used-space' if arg == '--keep-storage' else arg for arg in command]
                         item['command'] = command
                 output = runner(command)
@@ -157,9 +157,11 @@ def run_cleanup(config, apply=False, runner=execute, now=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, required=True)
-    parser.add_argument('--apply', action='store_true', help='Apply configured cleanup; default only previews')
+    parser = argparse.ArgumentParser(description=__doc__,add_help=False)
+    parser.add_argument('-h','--help',action='help',help='显示帮助并退出')
+    parser._optionals.title='可选参数'
+    parser.add_argument('--config', type=Path, required=True,help='已有采集器配置文件')
+    parser.add_argument('--apply', action='store_true', help='按配置执行清理；不传此参数时仅预览')
     args = parser.parse_args()
     config = json.loads(args.config.read_text(encoding='utf-8'))
     ipc = checked_directory(config['ipcDirectory'])
@@ -168,7 +170,7 @@ def main():
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            print('Another cleanup is already running.')
+            print('已有清理任务正在运行，本次已跳过。')
             return
         report = run_cleanup(config, args.apply)
         print(json.dumps(report, ensure_ascii=False))

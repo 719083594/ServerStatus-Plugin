@@ -1,6 +1,6 @@
 {
   "name": "server-status-plugin",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "框架独立的 Linux 服务器状态采集、PNG 看板与安全定时缓存清理；附带 Yunzai 适配。",
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",

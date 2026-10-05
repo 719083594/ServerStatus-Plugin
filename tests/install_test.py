@@ -14,7 +14,7 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(config['applicationRoot'],str(app));self.assertNotIn('yunzaiRoot',config)
             self.assertEqual((package/'index.js').read_bytes(),(ROOT/'index.js').read_bytes())
             repeat=subprocess.run(command,capture_output=True,text=True)
-            self.assertNotEqual(repeat.returncode,0);self.assertIn('Config exists',repeat.stderr)
+            self.assertNotEqual(repeat.returncode,0);self.assertIn('配置已存在',repeat.stderr)
             diagnostic=subprocess.run([sys.executable,str(package/'scripts/diagnose.py'),'--config',str(package/'collector/config.json')],check=True,capture_output=True,text=True)
             self.assertTrue(json.loads(diagnostic.stdout)['ready'])
 if __name__=='__main__':unittest.main()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install an explicitly enabled cleanup timer, preserving existing collector settings."""
+"""显式启用每日缓存清理定时器，保留已有采集器配置。"""
 import argparse
 import importlib.util
 import json
@@ -17,20 +17,22 @@ spec.loader.exec_module(cleanup)
 def quote(path):
     value = str(path)
     if any(char in value for char in '\r\n\0%'):
-        raise ValueError('Unsupported path')
+        raise ValueError('路径含有不支持的字符')
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, required=True, help='Existing host collector config')
-    parser.add_argument('--enable', action='store_true', help='Explicitly enable automatic deletion')
-    parser.add_argument('--time', default='03:30', help='Daily time in Asia/Shanghai')
+    parser = argparse.ArgumentParser(description=__doc__,add_help=False)
+    parser.add_argument('-h','--help',action='help',help='显示帮助并退出')
+    parser._optionals.title='可选参数'
+    parser.add_argument('--config', type=Path, required=True, help='已有宿主机采集器配置文件')
+    parser.add_argument('--enable', action='store_true', help='明确启用定时清理')
+    parser.add_argument('--time', default='03:30', help='每日执行时间（北京时间）')
     args = parser.parse_args()
     if sys.platform != 'linux' or os.geteuid() != 0:
-        raise ValueError('Install the timer as root on the Linux host')
+        raise ValueError('请在 Linux 宿主机以 root 安装定时器')
     if not args.enable:
-        raise ValueError('Pass --enable to explicitly authorize scheduled cleanup')
+        raise ValueError('请传 --enable 明确启用定时清理')
     config_path = args.config.resolve()
     config = json.loads(config_path.read_text(encoding='utf-8'))
     config['cleanup'] = {**cleanup.DEFAULTS, **config.get('cleanup', {}), 'enabled': True, 'scheduleTime': args.time}
@@ -38,7 +40,7 @@ def main():
     root = cleanup.checked_directory(config.get('applicationRoot') or config.get('yunzaiRoot'))
     ipc = cleanup.checked_directory(config['ipcDirectory'])
     if root == Path(root.anchor):
-        raise ValueError('Refusing cleanup at the filesystem root')
+        raise ValueError('禁止将文件系统根目录作为清理范围')
     paths = [ipc, root / 'temp', root / 'data/upload_tmp', root / 'logs']
     for path in paths:
         if path.exists() or path.is_symlink():
@@ -89,7 +91,7 @@ WantedBy=timers.target
         target.chmod(0o644)
     subprocess.run(['systemctl', 'daemon-reload'], check=True)
     subprocess.run(['systemctl', 'enable', '--now', 'server-status-cleanup.timer'], check=True)
-    print('Cleanup enabled daily at ' + value['scheduleTime'] + ' Asia/Shanghai (up to 5 minutes delay).')
+    print('定时清理已启用，每日 ' + value['scheduleTime'] + '（北京时间，最多延迟 5 分钟）。')
 
 
 if __name__ == '__main__':
