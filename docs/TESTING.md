@@ -8,12 +8,14 @@
 - Linux Python 的 8 项测试：CPU 算法、内存口径、无 Docker 回退、容器名称校验、五种 PNG 渲染、未知框架字段、非法请求和过期请求。
 - Linux 临时框架目录中运行安装器、诊断器、重复安装防覆盖检查。
 - README 预览使用测试构造的数据，不是实际用户服务器截图。
+- 清理：配置校验、默认关闭、固定 Docker 命令、预览不执行、保留新文件和业务数据、符号链接/硬链接保护、仅轮转日志和失败报告。
 
 自动检查：
 
 ```bash
 node --test tests/*.test.mjs
 python3 tests/collector_test.py
+python3 tests/cleanup_test.py
 ```
 
 Python 测试需要 Pillow 和中文字体。GitHub Actions 在 Ubuntu 上安装这些依赖并运行检查。安装器不会替你重启云崽，实际使用仍需按安装说明启动采集器和重启机器人。

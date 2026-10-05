@@ -1,4 +1,4 @@
-"""On-demand host metrics. Fixed read-only commands; no user-provided shell or paths."""
+"""On-demand host metrics; optional cleanup runs in a separate host timer."""
 import json, os, re, subprocess, sys, time, threading
 from datetime import datetime
 from pathlib import Path
@@ -101,7 +101,12 @@ def storage():
         if CONFIG.get('dockerMode','auto')=='off':raise ValueError('Docker disabled')
         docker=[json.loads(s) for s in run(['docker','system','df','--format','{{json .}}'],4).splitlines()]
     except Exception:docker=[]
-    storage_cache={'at':time.time(),'mounts':mounts,'directories':dirs,'docker':docker}
+    cleanup={'enabled':CONFIG.get('cleanup',{}).get('enabled',False),'scheduleTime':CONFIG.get('cleanup',{}).get('scheduleTime','03:30')}
+    try:
+        report=DIRECTORY/'cleanup.json'
+        if report.stat().st_size<100000:cleanup['last']=json.loads(report.read_text(encoding='utf-8'))
+    except (OSError,ValueError):pass
+    storage_cache={'at':time.time(),'mounts':mounts,'directories':dirs,'docker':docker,'cleanup':cleanup}
     return storage_cache
 
 def services():
@@ -191,7 +196,7 @@ def render(data,kind,target):
         d.text((56,y+146),f"云崽进程内存：{size(r.get('botRss',0))}",20,'#758399')
         d.text((56,y+180),'内存已用 = 总量 - MemAvailable；包含系统和全部服务，不含可回收缓存。',18,'#758399')
     if kind in {'all','storage'}:
-        s=data['storage'];height=80+len(s['mounts'])*108+len(s['directories'])*36+len(s['docker'])*32+75
+        s=data['storage'];height=80+len(s['mounts'])*108+len(s['directories'])*36+len(s['docker'])*32+160
         y=d.section('硬盘与存储',height);yy=y+65
         for row in s['mounts']:
             d.text((56,yy),f"磁盘 {row['mount']} ({row['type']})    {row['percent']:.1f}% 已用",26)
@@ -201,8 +206,18 @@ def render(data,kind,target):
         yy+=15
         labels={'Images':'Docker镜像','Containers':'容器可写层','Local Volumes':'Docker数据卷','Build Cache':'构建缓存'}
         for row in s['docker']:
-            d.text((56,yy),f"{labels.get(row['Type'],row['Type'])}：{row['Size']}    可回收 {row['Reclaimable']}",20);yy+=32
-        d.text((56,yy+12),'同一磁盘不重复计数；Docker与目录容量可能重叠，请勿相加。不会自动清理。',18,'#758399')
+            d.text((56,yy),f"{labels.get(row['Type'],row['Type'])}：{row['Size']}    估算可回收 {row['Reclaimable']}",20);yy+=32
+        d.text((56,yy+8),'Docker 估算含共享层；实际释放以清理结果为准，目录与 Docker 容量勿相加。',18,'#758399');yy+=38
+        cleanup=s.get('cleanup',{});last=cleanup.get('last')
+        schedule=f"每天 {cleanup.get('scheduleTime','03:30')}（北京时间，最多延迟5分）" if cleanup.get('enabled') else '未启用'
+        d.text((56,yy),'定时清理：'+schedule,20);yy+=34
+        if last:
+            at=datetime.fromtimestamp(last['finishedAt']/1000).strftime('%m-%d %H:%M')
+            state='完成' if last.get('success') else '部分失败，查看清理日志'
+            reclaimed=' / '.join(item.get('reclaimed','失败') for item in last.get('docker',[]))
+            d.text((56,yy),f"最近 {at} {state} · 临时文件 {last.get('filesDeleted',0)} 个",20);yy+=30
+            d.text((56,yy),'Docker 实际释放（镜像 / 构建缓存）：'+(reclaimed or '未清理'),18,'#758399')
+        else:d.text((56,yy),'仅清理过期缓存；保留容器、数据卷、聊天记录、登录和配置。',18,'#758399')
     if kind in {'all','services'}:
         rows=data['services'];y=d.section('服务状态 · 容器 CPU 以单核100%计，多核可超过100%',125+len(rows)*78)
         yy=y+70

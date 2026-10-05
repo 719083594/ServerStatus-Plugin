@@ -70,6 +70,43 @@ sudo python3 plugins/yunzai-server-status/scripts/install.py \
 | Docker CLI 与相应权限 | 可选的容器监测 | 未安装时可关闭该项 |
 | systemd | 可选的后台开机启动 | 也可自行用进程管理器 |
 
+## 定时清理（v1.1.0）
+
+`#系统` / `#存储` 中的 Docker “估算可回收”来自 Docker，可能包含共享镜像层，不代表能实际释放同样大小的空间。状态 PNG 每次覆盖，不积累历史图片。
+
+新增可选的宿主机清理任务。默认关闭；在 **Linux 宿主机** 上使用已有采集器配置显式启用：
+
+```bash
+sudo python3 plugins/yunzai-server-status/scripts/install-cleanup.py \
+  --config plugins/yunzai-server-status/collector/config.json --enable --time 03:30
+```
+
+Docker 部署使用宿主机插件和配置的实际路径。任务独立于机器人进程，每天北京时间 03:30 执行，最多随机延迟 5 分钟；错过时间后开机补执行。更改时间后重新运行安装命令，其余配置保留。
+
+| 采集器 JSON 中的 `cleanup` 配置 | 默认值 | 清理范围 |
+| --- | --- | --- |
+| `enabled` | `false` | 安装器显式启用；改为 false 可阻止实际清理 |
+| `pruneUnusedImages` / `imageAgeHours` | `true` / `168` | 创建超过 7 天、未被任何容器引用的镜像 |
+| `pruneBuildCache` / `buildCacheAgeHours` / `buildCacheKeepGB` | `true` / `24` / `1` | 至少 24 小时未使用的构建缓存，目标保留 1GB；实际释放由 Docker 决定 |
+| `cleanTemporaryFiles` / `temporaryMaxAgeHours` | `true` / `168` | 框架 `temp`、`data/upload_tmp` 中超过 7 天的普通文件 |
+| `cleanRotatedLogs` / `rotatedLogMaxAgeHours` | `true` / `336` | `logs` 中超过 14 天的 `.log.gz`、`.log.zst`、`.log.1` 等轮转文件 |
+
+保留容器、数据卷、聊天历史、数据库、QQ 登录、配置、备份和当前日志。不跟随符号链接、不删硬链接文件。只清理上述固定路径。启用后需重启采集器，让状态图显示最新配置。
+
+```bash
+# 预览，不删除文件、不执行 Docker prune
+sudo python3 plugins/yunzai-server-status/collector/cleanup.py --config HOST_CONFIG.json
+# 执行一次已启用的清理
+sudo python3 plugins/yunzai-server-status/collector/cleanup.py --config HOST_CONFIG.json --apply
+# 查看下一次时间和执行结果
+systemctl list-timers yunzai-server-status-cleanup.timer
+journalctl -u yunzai-server-status-cleanup.service -n 20 --no-pager
+# 关闭自动执行
+sudo systemctl disable --now yunzai-server-status-cleanup.timer
+```
+
+最近结果保存为 IPC 目录的固定 `cleanup.json`，不累积历史报告；`#系统` / `#存储` 显示时间、文件数量和 Docker 实际回收量。Docker 操作需要宿主机权限。未来重建镜像可能需要重新下载已清理的构建缓存。
+
 ## 常见问题
 
 “采集超时/无法发图”先运行：
