@@ -52,6 +52,7 @@ Type=oneshot
 ExecStart={quote(sys.executable)} {quote(PACKAGE / 'collector/cleanup.py')} --config {quote(config_path)} --apply
 User=root
 Environment=TZ=Asia/Shanghai
+Environment={quote('DOCKER_CONFIG=' + str(ipc / 'docker-client'))}
 UMask=0007
 NoNewPrivileges=true
 ProtectSystem=strict
@@ -59,7 +60,7 @@ ProtectHome=true
 PrivateTmp=true
 ReadWritePaths={' '.join(('-' if not path.exists() else '') + quote(path) for path in paths)}
 CPUQuota=20%
-MemoryMax=128M
+MemoryMax=256M
 TasksMax=64
 TimeoutStartSec=300
 '''

@@ -110,12 +110,15 @@ class FileCleanupTests(unittest.TestCase):
         old = self.old(self.root / 'data/upload_tmp/old.tmp')
         database = self.old(self.root / 'data/important.db')
         def runner(args):
+            if '--help' in args:
+                return 'Options: --max-used-space bytes'
             if args[1] == 'image':
                 raise PermissionError('Docker unavailable')
             return 'Total: 1.2GB\n'
         report = c.run_cleanup(self.config, True, runner=runner)
         self.assertFalse(report['success'])
         self.assertEqual(report['docker'][1]['reclaimed'], '1.2GB')
+        self.assertIn('--max-used-space', report['docker'][1]['command'])
         self.assertFalse(old.exists())
         self.assertTrue(database.exists())
         self.assertEqual(json.loads((self.ipc / 'cleanup.json').read_text())['filesDeleted'], 1)

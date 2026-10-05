@@ -116,11 +116,19 @@ def run_cleanup(config, apply=False, runner=execute, now=None):
         item = {'kind': kind, 'command': command}
         if apply:
             try:
+                if kind == 'buildCache':
+                    options = runner(['docker', 'builder', 'prune', '--help'])
+                    if '--keep-storage' not in options:
+                        if '--max-used-space' not in options:
+                            raise ValueError('Unsupported Docker build cache retention options')
+                        command = ['--max-used-space' if arg == '--keep-storage' else arg for arg in command]
+                        item['command'] = command
                 output = runner(command)
                 match = re.search(r'(?:Total reclaimed space|Total):\s*([^\r\n]+)', output)
                 item['reclaimed'] = match.group(1).strip() if match else '未报告'
             except Exception as error:
                 item['error'] = type(error).__name__
+                item['errorDetail'] = str(getattr(error, 'stderr', '') or str(error))[:500]
                 report['errors'].append(kind + ': ' + type(error).__name__)
         report['docker'].append(item)
     targets = []
