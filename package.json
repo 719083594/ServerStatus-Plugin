@@ -1,6 +1,6 @@
 {
   "name": "yunzai-server-status",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "主人专用服务器状态看板，展示 CPU、内存、存储、插件和服务状态。",
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -30,6 +30,7 @@
     "SECURITY.md",
     "CHANGELOG.md",
     "guoba.support.js",
-    "resources"
+    "resources",
+    "orangejuice.plugin.json"
   ]
 }

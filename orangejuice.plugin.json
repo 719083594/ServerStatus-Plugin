@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "title": "YunzaiServerStatus",
+  "description": "主人专用服务器状态看板，展示 CPU、内存、存储、插件和服务状态。",
+  "homepage": "https://github.com/719083594/yunzai-server-status",
+  "commands": [
+    "#系统",
+    "/系统",
+    "#资源",
+    "#存储",
+    "#插件",
+    "#服务",
+    "#系统帮助"
+  ],
+  "configs": [
+    {
+      "id": "plugin",
+      "title": "机器人请求配置",
+      "file": "config/plugin.json",
+      "example": "config/plugin.example.json",
+      "reload": "restart",
+      "fields": [
+        {
+          "path": "ipcDirectory",
+          "label": "采集器通信目录",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "collector",
+      "title": "采集器部署参考",
+      "file": "collector/config.example.json",
+      "readonly": true,
+      "reload": "restart",
+      "fields": []
+    }
+  ]
+}
