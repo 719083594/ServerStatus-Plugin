@@ -1,149 +1,86 @@
-<img src="resources/icon.png" width="72" height="72" alt="YunzaiServerStatus 图标">
+<img src="resources/icon.png" width="72" height="72" alt="ServerStatus-Plugin 图标">
 
-# YunzaiServerStatus · 服务器状态
+# ServerStatus-Plugin · 服务器状态
 
-主人发送一条命令，返回 Linux 宿主机的 CPU、内存、磁盘、服务和插件状态图片。
+框架独立的 **Linux 宿主机**状态采集、JSON 接口、PNG 看板与可选定时清理。附带 Yunzai V3 命令适配器；其他机器人框架可通过 CLI 或 Node.js API 接入。
+
+核心无云崽安装前提。独立 JSON CLI 只使用 Python 标准库；PNG 需要 Pillow 和中文字体。**通用核心不等于已提供所有框架的安装即用适配器**：当前现成适配器仅为 Yunzai V3，NoneBot、AstrBot 等需按[适配协议](docs/ADAPTERS.md)接入。宿主机采集不支持 Windows/macOS。
 
 ![合成示例，非真实服务器数据](docs/preview.png)
 
-## 功能与命令
+## 独立运行
 
-| 命令 | 返回内容 |
-| --- | --- |
-| `#系统` / `#服务器` | 完整状态总览图片 |
-| `#资源` | CPU、物理内存、Swap、运行时间、负载、云崽进程内存 |
-| `#存储` | 磁盘与 inode 使用率、程序和配置的数据目录容量、Docker 存储 |
-| `#插件` | 插件目录、版本、框架提供的加载功能与定时任务数量 |
-| `#服务` | Docker 服务健康状态、CPU、内存、进程数和重启次数 |
-| `#系统帮助` | 简短命令说明 |
+```bash
+git clone https://github.com/719083594/ServerStatus-Plugin.git
+cd ServerStatus-Plugin
+python3 scripts/status.py --application-root /srv/my-application --kind resources --format json
+```
 
-所有命令支持 `/`，例如 `/系统`。**仅框架配置的主人可以触发**。框架自己的群消息限制、禁言和黑白名单仍然生效。
+PNG 依赖（Debian/Ubuntu）：
 
-## 支持范围
+```bash
+sudo apt-get install python3-pil fonts-wqy-microhei
+python3 scripts/status.py --application-root /srv/my-application \
+  --kind all --format both --output /tmp/server-status.png
+```
 
-- **框架**：按云崽 V3 插件接口设计，支持 TRSS-Yunzai / Miao-Yunzai 等具有 `lib/plugins/plugin.js`、`e.isMaster`、`e.reply`、全局 `segment.image` 的兼容框架。
-- **系统**：采集器需要 Linux；Ubuntu/Debian 提供自动依赖安装。其他 Linux 可自行安装 Python/Pillow/中文字体。
-- **部署**：支持原生 Node 部署和 Docker 内运行云崽；Docker 模式的采集器必须运行在**宿主机**，通过共享目录传递图片。
-- Windows/macOS 宿主机、NoneBot、AstrBot、没有云崽插件接口的框架不在本版本支持范围内。
-- 没有 Docker 时宿主机资源和插件图仍可用，服务页会提示 Docker 不可用。
-- 框架没有提供插件计数或在线状态时显示“未知/未提供”。
+`--kind` 可选 `all/resources/storage/plugins/services`。标准输出始终为 `{kind, generatedAt, details, dimensions?, pngPath?}` JSON；PNG 路径每次覆盖。可用 `--config collector/config.json` 指定 Docker、数据目录和字体配置；不传配置也能运行。`--runtime runtime.json` 可传框架的真实运行数据，不传则显示未知，不会把缺少在线状态当成离线。
 
-## 完整安装
+```js
+import {collectSnapshot} from './index.js'
+const report = await collectSnapshot({kind:'resources'})
+console.log(report.details.memory)
+```
 
-**本插件有一个必需的附属组件：包内的 Python 宿主机采集器。只复制 `index.js` 不能使用。** 发布包包含采集器和安装、诊断工具。
+Node.js 18+ API 会调用本机 `python3`，没有 npm 第三方依赖。JSON 模式无需采集守护服务。PNG 的 `format:'both', output:'/tmp/status.png'` 会附带 `report.png` Buffer。
 
-### Ubuntu/Debian 原生部署
+## Yunzai 安装
 
 在云崽根目录执行：
 
 ```bash
-git clone https://github.com/719083594/yunzai-server-status.git plugins/yunzai-server-status
-sudo python3 plugins/yunzai-server-status/scripts/install.py \
-  --yunzai-root "$PWD" --bot-user "$(id -un)" \
+git clone https://github.com/719083594/ServerStatus-Plugin.git plugins/ServerStatus-Plugin
+sudo python3 plugins/ServerStatus-Plugin/scripts/install.py \
+  --application-root "$PWD" --integration yunzai --application-user "$(id -un)" \
   --install-deps --systemd --docker-mode off
 ```
 
-安装脚本会检查框架、安装你显式选择的依赖，创建本地配置与 IPC 目录，安装开机启动的采集服务。然后**重启云崽**，用主人账号发送 `#系统`。
+安装器在本地写入 `config/integration.json` 选择适配器，源代码和 Git 跟踪文件保持完整，后续可正常 `git pull`。重启云崽后，以框架配置的主人发送：
 
-如果需要监测 Docker，改用 `--docker-mode auto`，并确保采集服务运行用户有 Docker 权限。原生示例的 `off` 避免没有 Docker 权限影响初次安装。
+| 命令（也支持 `/`） | 内容 |
+| --- | --- |
+| `#系统` / `#服务器` | 完整总览 |
+| `#资源` | CPU、内存、Swap、运行时间、应用进程 |
+| `#存储` | 磁盘、inode、数据目录、Docker 存储与清理结果 |
+| `#插件` | 适配器提供的插件版本和实际加载计数 |
+| `#服务` | Docker 容器状态与占用 |
+| `#系统帮助` | 命令说明 |
 
-### Docker 部署
+支持具有 `lib/plugins/plugin.js`、`e.isMaster`、`e.reply`、`segment.image` 的 Yunzai V3 接口。非主人不会采集或回复。框架群消息限制、黑白名单仍生效。不调用 AI，不将系统信息发送到外部服务。
 
-先阅读 [Docker 安装步骤](docs/INSTALL.md#docker-部署)，确认宿主机云崽目录与机器人内目录指向相同文件。采集器不要装在机器人容器内，避免得到错误的磁盘/CPU数据。
+Docker 内机器人需要宿主机采集器与共享 IPC 目录，详见[完整安装说明](docs/INSTALL.md)。没有 Docker 或没有权限时仍能查看宿主机资源，服务页会诚实提示不可用。
 
-### ZIP 安装
+## 定时清理
 
-下载 [Releases](https://github.com/719083594/yunzai-server-status/releases) 的 `yunzai-server-status-v1.0.0.zip`，将最外层 `yunzai-server-status` 文件夹完整解压到云崽 `plugins` 目录，再运行上面的安装命令（跳过 `git clone`）。
-
-所有依赖、非 systemd 启动方式、权限和 Docker 路径示例见 [完整安装说明](docs/INSTALL.md)。
-
-## 必须的支持组件
-
-| 组件 | 用途 | 是否包含 |
-| --- | --- | --- |
-| 云崽兼容框架与 QQ 适配器 | 收取命令、识别主人、发送图片 | 使用你的现有框架 |
-| `collector/collector.py` | 宿主机采集与 PNG 渲染 | **包内已包含，必须启动** |
-| Python 3.10+ | 运行采集器与安装工具 | 操作系统安装 |
-| Pillow | 图片渲染 | Ubuntu/Debian 可由安装器安装 |
-| 中文字体 | 防止图片中文乱码 | 可由安装器安装，或指定 `fontPath` |
-| `du` | 数据目录占用统计 | Linux coreutils |
-| Docker CLI 与相应权限 | 可选的容器监测 | 未安装时可关闭该项 |
-| systemd | 可选的后台开机启动 | 也可自行用进程管理器 |
-
-## 定时清理（v1.1.0）
-
-`#系统` / `#存储` 中的 Docker “估算可回收”来自 Docker，可能包含共享镜像层，不代表能实际释放同样大小的空间。状态 PNG 每次覆盖，不积累历史图片。
-
-新增可选的宿主机清理任务。默认关闭；在 **Linux 宿主机** 上使用已有采集器配置显式启用：
+默认关闭。Docker“估算可回收”可能包含共享镜像层，以实际清理结果为准；状态图片每次覆盖，不会积累历史。
 
 ```bash
-sudo python3 plugins/yunzai-server-status/scripts/install-cleanup.py \
-  --config plugins/yunzai-server-status/collector/config.json --enable --time 03:30
+# 预览，不删除任何文件，不执行 Docker prune
+python3 collector/cleanup.py --config collector/config.json
+# Linux 宿主机显式启用：每天北京时间 03:30，最多延迟 5 分钟
+sudo python3 scripts/install-cleanup.py --config collector/config.json --enable --time 03:30
 ```
 
-Docker 部署使用宿主机插件和配置的实际路径。任务独立于机器人进程，每天北京时间 03:30 执行，最多随机延迟 5 分钟；错过时间后开机补执行。更改时间后重新运行安装命令，其余配置保留。
+固定范围：7 天以上未使用镜像、24 小时以上构建缓存（保留 1GB）、`applicationRoot/temp` 与 `applicationRoot/data/upload_tmp` 的 7 天以上普通文件、`applicationRoot/logs` 的 14 天以上已轮转日志。跳过隐藏文件、符号链接、硬链接和跨设备文件；不删除容器、数据卷、聊天记录、数据库、登录或配置。Docker 清理作用于宿主机全部 Docker 镜像/构建缓存，请在启用前了解[安全边界](SECURITY.md)。
 
-| 采集器 JSON 中的 `cleanup` 配置 | 默认值 | 清理范围 |
-| --- | --- | --- |
-| `enabled` | `false` | 安装器显式启用；改为 false 可阻止实际清理 |
-| `pruneUnusedImages` / `imageAgeHours` | `true` / `168` | 创建超过 7 天、未被任何容器引用的镜像 |
-| `pruneBuildCache` / `buildCacheAgeHours` / `buildCacheKeepGB` | `true` / `24` / `1` | 至少 24 小时未使用的构建缓存，目标保留 1GB；实际释放由 Docker 决定 |
-| `cleanTemporaryFiles` / `temporaryMaxAgeHours` | `true` / `168` | 框架 `temp`、`data/upload_tmp` 中超过 7 天的普通文件 |
-| `cleanRotatedLogs` / `rotatedLogMaxAgeHours` | `true` / `336` | `logs` 中超过 14 天的 `.log.gz`、`.log.zst`、`.log.1` 等轮转文件 |
+服务为 `server-status.service`、`server-status-cleanup.service` 和 `server-status-cleanup.timer`。停用：`sudo systemctl disable --now server-status-cleanup.timer`，并将本地 `cleanup.enabled` 设为 `false`。
 
-保留容器、数据卷、聊天历史、数据库、QQ 登录、配置、备份和当前日志。不跟随符号链接、不删硬链接文件。只清理上述固定路径。启用后需重启采集器，让状态图显示最新配置。
+## 从旧版升级
 
-```bash
-# 预览，不删除文件、不执行 Docker prune
-sudo python3 plugins/yunzai-server-status/collector/cleanup.py --config HOST_CONFIG.json
-# 执行一次已启用的清理
-sudo python3 plugins/yunzai-server-status/collector/cleanup.py --config HOST_CONFIG.json --apply
-# 查看下一次时间和执行结果
-systemctl list-timers yunzai-server-status-cleanup.timer
-journalctl -u yunzai-server-status-cleanup.service -n 20 --no-pager
-# 关闭自动执行
-sudo systemctl disable --now yunzai-server-status-cleanup.timer
-```
+原 `yunzai-server-status` 的 `yunzaiRoot` 配置和 `--yunzai-root` 参数继续兼容；新安装统一使用 `applicationRoot` 和 `ServerStatus-Plugin`。保留原 IPC 路径、collector 配置及 cleanup 参数，将整包放入 `plugins/ServerStatus-Plugin`，在 `config/integration.json` 写入 `{"adapter":"yunzai"}`。迁移 systemd 的 `ExecStart` 到新目录和通用服务名，再停用旧服务/定时器，避免重复执行。不要同时加载两个插件目录。
 
-最近结果保存为 IPC 目录的固定 `cleanup.json`，不累积历史报告；`#系统` / `#存储` 显示时间、文件数量和 Docker 实际回收量。Docker 操作需要宿主机权限。未来重建镜像可能需要重新下载已清理的构建缓存。
+公开仓库不含本机配置、QQ 账号、服务器地址和凭据。ZIP 应完整解压为 `ServerStatus-Plugin`，只复制 JS 入口无法提供宿主机图片采集。
 
-## 常见问题
+## 验证与许可
 
-“采集超时/无法发图”先运行：
-
-```bash
-python3 plugins/yunzai-server-status/scripts/diagnose.py \
-  --config plugins/yunzai-server-status/collector/config.json
-systemctl status yunzai-server-status --no-pager
-journalctl -u yunzai-server-status -n 30 --no-pager
-```
-
-确认机器人已重启、采集器已启动、双方 IPC 目录指向同一目录，并且机器人能读取其中图片。细节见 [故障排查](docs/INSTALL.md#故障排查)。
-
-## 数据口径与资源
-
-CPU 采用宿主机全部核心平均占用（最高 100%）；容器 CPU 的 100% 表示一个核心，二者口径不同。内存已用为 `MemTotal - MemAvailable`。同一磁盘去重；数据目录与 Docker 的容量可能重叠，不能相加。
-
-相同面板缓存 5 秒，普通存储统计缓存 60 秒。完整程序目录每小时按需后台刷新；首次还没有统计结果时明确提示“统计中或无法读取”。只覆盖固定状态文件，不积累历史图。systemd 默认限制 128 MiB 内存、30% 单核 CPU。实际耗时随目录规模与服务器负载变化。
-
-## 验证与隐私
-
-测试覆盖权限、双前缀、图片消息段、并发、缓存、超时及框架字段回退。已在 TRSS-Yunzai 的 Linux/Docker 环境验证图片生成与发送，其他分支的兼容性以插件接口和安装检查为准。
-
-预览为合成示例。实际状态数据保存在本机，通过主人触发的回复发送。详见 [安全与隐私](SECURITY.md)。
-
-## 许可：允许非商业复制、修改、分享，禁止商用
-
-采用 [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)。允许符合该许可证的非商业使用、复制、修改和再分发；分享时保留 `LICENSE` 和 `NOTICE`。商业使用需另行取得权利人许可，不能把它改成允许商用的授权。
-
-以 [LICENSE](LICENSE) 的完整条款为准；各外部依赖保留自己的许可证。
-
-## 插件列表信息
-
-插件列表显示名称为 `YunzaiServerStatus`，包含本地图标、作者和功能介绍。安装目录可以沿用原名；显示名称不影响命令或配置路径。
-
-## OrangeJuice 管理面板
-
-插件提供 `orangejuice.plugin.json` 原生配置声明。安装橙汁后，在插件主页的“配置项”中编辑各项设置；保存后按页面提示重启机器人。
-
-采集器实际配置通常位于机器人目录外，部署者可通过橙汁 `extraConfigs` 注册该实例文件；仓库内示例仅供参考。
+见[验证说明](docs/TESTING.md)、[安装说明](docs/INSTALL.md)和[适配协议](docs/ADAPTERS.md)。本项目继续采用 [PolyForm Noncommercial 1.0.0](LICENSE)；通用化不改变非商业许可条件。外部框架、Pillow、字体、Docker 依赖各自许可，不随包分发。

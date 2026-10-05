@@ -102,10 +102,10 @@ def run_cleanup(config, apply=False, runner=execute, now=None):
     if sys.platform != 'linux':
         raise ValueError('Cleanup requires the Linux host')
     value = settings(config)
-    root = checked_directory(config['yunzaiRoot'])
+    root = checked_directory(config.get('applicationRoot') or config.get('yunzaiRoot'))
     ipc = checked_directory(config['ipcDirectory'])
-    if not (root / 'lib/plugins/plugin.js').is_file():
-        raise ValueError('Not a Yunzai framework root')
+    if root == Path(root.anchor):
+        raise ValueError('Refusing cleanup at the filesystem root')
     if apply and not value['enabled']:
         raise ValueError('Cleanup is not enabled in local configuration')
     now = time.time() if now is None else now

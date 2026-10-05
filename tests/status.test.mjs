@@ -1,3 +1,4 @@
+import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
@@ -5,11 +6,12 @@ import path from 'node:path'
 import {commands,commandKind,handleStatus,createDashboard} from '../lib/status.mjs'
 for(const name of Object.keys(commands))for(const prefix of ['#','/'])assert.equal(commandKind(prefix+name),commands[name])
 let builds=0,replies=[]
-await handleStatus({isMaster:false,msg:'#系统',reply:async m=>replies.push(m)},async()=>{builds++},()=>{})
+await handleStatus({isOwner:false,msg:'#系统',reply:async m=>replies.push(m)},async()=>{builds++},()=>{})
 assert.equal(builds,0);assert.equal(replies.length,0)
 const png=Buffer.from('89504e470d0a1a0a0001','hex')
-await handleStatus({isMaster:true,msg:'/系统',reply:async m=>{replies.push(m);return {message_id:1}}},async kind=>{assert.equal(kind,'all');return {png}},buffer=>({type:'image',file:buffer}))
+await handleStatus({isOwner:true,msg:'/系统',reply:async m=>{replies.push(m);return {message_id:1}}},async kind=>{assert.equal(kind,'all');return {png}},buffer=>({type:'image',file:buffer}))
 assert.equal(replies[0].type,'image');assert.equal(replies[0].file,png)
+test('Linux collector IPC serializes requests and validates cache/timeouts', {skip:process.platform!=='linux'}, async()=>{
 const directory=await fs.mkdtemp(path.join(os.tmpdir(),'qqbot-status-test-'))
 let observed=[]
 const timer=setInterval(async()=>{
@@ -34,3 +36,4 @@ try{
  await assert.rejects(timeout('all'),/超时/)
  console.log(JSON.stringify({ok:true,checks:['both_command_prefixes','non_owner_no_collection','owner_image_segment','concurrent_request_serialization','cache','timeout']}))
 }finally{clearInterval(timer);await fs.rm(directory,{recursive:true,force:true})}
+})

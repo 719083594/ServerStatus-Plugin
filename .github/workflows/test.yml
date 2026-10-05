@@ -14,4 +14,6 @@ jobs:
       - run: node --test tests/*.test.mjs
       - run: /usr/bin/python3 tests/collector_test.py
       - run: /usr/bin/python3 tests/cleanup_test.py
-      - run: /usr/bin/python3 -m py_compile collector/collector.py collector/cleanup.py scripts/install.py scripts/install-cleanup.py scripts/diagnose.py
+      - run: /usr/bin/python3 tests/portable_test.py
+      - run: /usr/bin/python3 tests/install_test.py
+      - run: /usr/bin/python3 -m py_compile collector/collector.py collector/cleanup.py scripts/install.py scripts/install-cleanup.py scripts/diagnose.py scripts/status.py

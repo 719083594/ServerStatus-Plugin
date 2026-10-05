@@ -35,16 +35,16 @@ def main():
     config = json.loads(config_path.read_text(encoding='utf-8'))
     config['cleanup'] = {**cleanup.DEFAULTS, **config.get('cleanup', {}), 'enabled': True, 'scheduleTime': args.time}
     value = cleanup.settings(config)
-    root = cleanup.checked_directory(config['yunzaiRoot'])
+    root = cleanup.checked_directory(config.get('applicationRoot') or config.get('yunzaiRoot'))
     ipc = cleanup.checked_directory(config['ipcDirectory'])
-    if not (root / 'lib/plugins/plugin.js').is_file():
-        raise ValueError('Not a Yunzai framework root')
+    if root == Path(root.anchor):
+        raise ValueError('Refusing cleanup at the filesystem root')
     paths = [ipc, root / 'temp', root / 'data/upload_tmp', root / 'logs']
     for path in paths:
         if path.exists() or path.is_symlink():
             cleanup.checked_directory(path)
     service = f'''[Unit]
-Description=YunzaiServerStatus expired cache cleanup
+Description=ServerStatus expired application cache cleanup
 After=docker.service
 
 [Service]
@@ -65,13 +65,13 @@ TasksMax=64
 TimeoutStartSec=300
 '''
     timer = f'''[Unit]
-Description=Daily YunzaiServerStatus cache cleanup
+Description=Daily ServerStatus cache cleanup
 
 [Timer]
 OnCalendar=*-*-* {value['scheduleTime']}:00 Asia/Shanghai
 Persistent=true
 RandomizedDelaySec=300
-Unit=yunzai-server-status-cleanup.service
+Unit=server-status-cleanup.service
 
 [Install]
 WantedBy=timers.target
@@ -84,11 +84,11 @@ WantedBy=timers.target
     os.chown(temporary, original.st_uid, original.st_gid)
     temporary.replace(config_path)
     for name, text in [('service', service), ('timer', timer)]:
-        target = Path('/etc/systemd/system/yunzai-server-status-cleanup.' + name)
+        target = Path('/etc/systemd/system/server-status-cleanup.' + name)
         target.write_text(text, encoding='utf-8')
         target.chmod(0o644)
     subprocess.run(['systemctl', 'daemon-reload'], check=True)
-    subprocess.run(['systemctl', 'enable', '--now', 'yunzai-server-status-cleanup.timer'], check=True)
+    subprocess.run(['systemctl', 'enable', '--now', 'server-status-cleanup.timer'], check=True)
     print('Cleanup enabled daily at ' + value['scheduleTime'] + ' Asia/Shanghai (up to 5 minutes delay).')
 
 

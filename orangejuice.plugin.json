@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "title": "YunzaiServerStatus",
-  "description": "主人专用服务器状态看板，展示 CPU、内存、存储、插件和服务状态。",
-  "homepage": "https://github.com/719083594/yunzai-server-status",
+  "title": "ServerStatus-Plugin",
+  "description": "框架独立的 Linux 状态采集和 PNG 看板；附带主人专用 Yunzai 命令适配。",
+  "homepage": "https://github.com/719083594/ServerStatus-Plugin",
   "commands": [
     "#系统",
     "/系统",
@@ -15,7 +15,7 @@
   "configs": [
     {
       "id": "plugin",
-      "title": "机器人请求配置",
+      "title": "Yunzai 请求配置",
       "file": "config/plugin.json",
       "example": "config/plugin.example.json",
       "reload": "restart",
@@ -28,7 +28,7 @@
       ]
     },
     {
-      "id": "collector",
+      "id": "collector-example",
       "title": "采集器部署参考",
       "file": "collector/config.example.json",
       "readonly": true,

@@ -1,18 +1,9 @@
-import plugin from '../../lib/plugins/plugin.js'
+// Framework-independent API. Select an integration explicitly at install time.
 import fs from 'node:fs'
-import path from 'node:path'
-import {fileURLToPath} from 'node:url'
-import {createDashboard,handleStatus} from './lib/status.mjs'
-import {collectRuntime} from './lib/runtime.mjs'
-
-const root=path.dirname(fileURLToPath(import.meta.url))
-let config={}
-try { config=JSON.parse(fs.readFileSync(path.join(root,'config/plugin.json'),'utf8')) }
-catch(err) { if(err.code!=='ENOENT')throw new Error('服务器状态插件配置文件不是有效JSON') }
-const directory=path.resolve(config.ipcDirectory||'data/yunzai-server-status')
-const dashboard=createDashboard({directory,runtime:()=>collectRuntime(),timeoutMs:12000,cacheMs:5000})
-
-export class ServerStatus extends plugin {
-  constructor(){super({name:'服务器状态',dsc:'主人专用宿主机状态图片',event:'message',priority:5,rule:[{reg:/^[#\/](?:系统|服务器|资源|存储|插件|服务|系统帮助)\s*$/,fnc:'status',permission:'master'}]})}
-  async status(e){return handleStatus(e,dashboard,buffer=>globalThis.segment.image(buffer))}
-}
+let adapter
+try{adapter=JSON.parse(fs.readFileSync(new URL('./config/integration.json',import.meta.url),'utf8')).adapter}
+catch(err){if(err.code!=='ENOENT')throw new Error('Invalid integration configuration')}
+// Yunzai loaders read apps; default is empty and imports no framework modules.
+export const apps=adapter==='yunzai'?(await import('./integrations/yunzai/index.js')):{}
+if(adapter&&adapter!=='yunzai')throw new Error('Unsupported integration: '+adapter)
+export {commands,commandKind,handleStatus,createDashboard,runtimeFrom,collectSnapshot} from './lib/api.mjs'

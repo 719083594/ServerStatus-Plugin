@@ -2,26 +2,27 @@
 import json, os, re, subprocess, sys, time, threading
 from datetime import datetime
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
 
 CONFIG={}
 ROOT=Path.cwd()
-DIRECTORY=ROOT/'data/yunzai-server-status'
+DIRECTORY=ROOT/'data/server-status'
 FONT=None
 CONTAINERS={}
 KINDS={'all','resources','storage','plugins','services'}
 
 
-def configure(config):
+def configure(config, require_font=True):
     global CONFIG,ROOT,DIRECTORY,FONT,CONTAINERS,storage_cache
     CONFIG=config
-    ROOT=Path(config['yunzaiRoot']).expanduser().resolve()
-    DIRECTORY=Path(config['ipcDirectory']).expanduser().resolve()
-    if not ROOT.is_dir():raise ValueError('yunzaiRoot is not a directory')
+    ROOT=Path(config.get('applicationRoot') or config.get('yunzaiRoot') or Path.cwd()).expanduser().resolve()
+    DIRECTORY=Path(config.get('ipcDirectory') or ROOT/'data/server-status').expanduser().resolve()
+    if not ROOT.is_dir():raise ValueError('applicationRoot is not a directory')
     candidates=[config.get('fontPath'),'/usr/share/fonts/truetype/wqy/wqy-microhei.ttc','/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc','/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc']
     FONT=next((str(p) for p in candidates if p and Path(p).is_file()),None)
-    if not FONT:raise ValueError('Chinese font missing; install fonts-wqy-microhei or set fontPath')
-    ImageFont.truetype(FONT,24)
+    if require_font:
+        from PIL import ImageFont
+        if not FONT:raise ValueError('Chinese font missing; install fonts-wqy-microhei or set fontPath')
+        ImageFont.truetype(FONT,24)
     mode=config.get('dockerMode','auto')
     if mode not in ('auto','selected','off'):raise ValueError('Invalid dockerMode')
     CONTAINERS={}
@@ -56,10 +57,12 @@ def connection(value):return '未知' if value is None else '已连接' if value
 def count_text(value):return '未知' if value is None else value
 def percent(used,total):return round(used/total*100,1) if total else 0
 def size(n):
+    if n is None:return '未知'
     for unit in ['B','KiB','MiB','GiB','TiB']:
         if abs(n)<1024 or unit=='TiB':return f'{n:.1f} {unit}'
         n/=1024
 def duration(seconds):
+    if seconds is None:return '未知'
     days,rest=divmod(int(seconds),86400);hours,rest=divmod(rest,3600);minutes=rest//60
     return f'{days}天 {hours}小时 {minutes}分' if days else f'{hours}小时 {minutes}分'
 def cpu_ticks():
@@ -89,9 +92,9 @@ def storage():
             mounts.append({'mount':mount,'type':kind,'total':total,'used':used,'available':available,'percent':percent(used,used+available),'inodePercent':percent(v.f_files-v.f_ffree,v.f_files)})
         except OSError:continue
     dirs=[]
-    dirs.append({'label':'云崽程序和全部插件（后台缓存）','bytes':program_size()})
+    dirs.append({'label':'应用目录（后台缓存）','bytes':program_size()})
     configured=CONFIG.get('storageDirectories',[])
-    defaults=[{'label':'机器人运行数据','path':str(ROOT/'data')}]
+    defaults=[{'label':'应用运行数据','path':str(ROOT/'data')}]
     for item in (configured or defaults)[:20]:
         label=str(item.get('label','数据目录'))[:30]
         directory=Path(item['path']).expanduser().resolve()
@@ -128,22 +131,24 @@ def services():
 
 def plugins(runtime):
     rows=[]
-    names={'system':'TRSS 系统功能','adapter':'OneBot 适配器','other':'TRSS 辅助功能','example':'示例插件','chatgpt-plugin':'ChatGPT 插件','Guoba-Plugin':'锅巴管理面板','yunzai-server-status':'服务器状态图片','server-status':'服务器状态图片'}
+    names={'system':'TRSS 系统功能','adapter':'OneBot 适配器','other':'TRSS 辅助功能','example':'示例插件','chatgpt-plugin':'ChatGPT 插件','Guoba-Plugin':'锅巴管理面板','ServerStatus-Plugin':'服务器状态图片'}
     for item in runtime.get('plugins',[])[:50]:
         name=str(item.get('name',''))
         if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',name):continue
-        version=''
+        version=str(item.get('version',''))[:40]
         p=ROOT/'plugins'/name/'package.json'
         if p.is_file():
             try:version=str(json.loads(p.read_text()).get('version',''))[:40]
             except Exception:pass
-        if name in {'server-status','yunzai-server-status'} and not version:version='1.0.0'
-        rows.append({'name':name,'label':names.get(name,name),'version':version,'loaded':item.get('loaded',0),'active':item.get('active')})
+        rows.append({'name':name,'label':str(item.get('label',names.get(name,name)))[:40],'version':version,'loaded':item.get('loaded'),'active':item.get('active')})
     return rows
 
 def collect(request):
+    if sys.platform!='linux':raise ValueError('Host metrics require Linux')
     start=cpu_ticks();time.sleep(0.65);cpu=cpu_percent(start,cpu_ticks())
     runtime=request.get('runtime',{});kind=request['kind']
+    if kind not in KINDS:raise ValueError('Invalid panel')
+    if not isinstance(runtime,dict):raise ValueError('runtime must be an object')
     uptime=float(Path('/proc/uptime').read_text().split()[0]);loads=os.getloadavg()
     data={'cpuPercent':cpu,'cores':os.cpu_count(),'memory':memory(),'uptime':uptime,'load':list(loads),'runtime':runtime}
     if kind in {'all','storage'}:data['storage']=storage()
@@ -161,11 +166,12 @@ class Dashboard:
     def gauge(self,xy,label,value,subtitle):
         self.items.append(('gauge',(xy,label,value,subtitle)))
     def finish(self,target):
+        from PIL import Image, ImageDraw, ImageFont
         im=Image.new('RGB',(self.width,self.y+100),'#eef3f9');draw=ImageDraw.Draw(im)
         def font(px):return ImageFont.truetype(FONT,px)
         def text(xy,value,px=24,fill='#35465a'):draw.text(xy,value,font=font(px),fill=fill)
         draw.rounded_rectangle((28,28,1052,172),radius=24,fill='#162d49')
-        text((60,47),self.title,40,'#ffffff');text((62,110),'Linux 宿主机 · 仅主人可查看',24,'#a4c7ec')
+        text((60,47),self.title,40,'#ffffff');text((62,110),'Linux 宿主机 · ServerStatus-Plugin',24,'#a4c7ec')
         text((710,116),self.generated,21,'#a4c7ec')
         for typ,args in self.items:
             if typ=='section':
@@ -191,9 +197,9 @@ def render(data,kind,target):
         d.gauge((386,y+65),'物理内存',m['percent'],f"{size(m['used'])} / {size(m['total'])}")
         d.gauge((716,y+65),'Swap',m['swapPercent'],f"{size(m['swapUsed'])} / {size(m['swapTotal'])}")
         y=d.section('运行信息',215)
-        d.text((56,y+68),f"服务器已运行：{duration(data['uptime'])}       机器人：{duration(r.get('botUptime',0))}")
-        d.text((56,y+110),f"QQ：{connection(r.get('connected'))}    Node {r.get('nodeVersion','--')}    系统负载：{' / '.join(f'{n:.2f}' for n in data['load'])}",23)
-        d.text((56,y+146),f"云崽进程内存：{size(r.get('botRss',0))}",20,'#758399')
+        d.text((56,y+68),f"服务器已运行：{duration(data['uptime'])}       应用：{duration(r.get('botUptime'))}")
+        d.text((56,y+110),f"连接：{connection(r.get('connected'))}    Node {r.get('nodeVersion','未知')}    系统负载：{' / '.join(f'{n:.2f}' for n in data['load'])}",23)
+        d.text((56,y+146),f"应用进程内存：{size(r.get('botRss'))}",20,'#758399')
         d.text((56,y+180),'内存已用 = 总量 - MemAvailable；包含系统和全部服务，不含可回收缓存。',18,'#758399')
     if kind in {'all','storage'}:
         s=data['storage'];height=80+len(s['mounts'])*108+len(s['directories'])*36+len(s['docker'])*32+160
@@ -232,7 +238,7 @@ def render(data,kind,target):
         rows=data['plugins'];y=d.section(f"插件 · 已加载 {count_text(r.get('loadedCount'))} 个功能 / {count_text(r.get('taskCount'))} 个定时任务",135+len(rows)*63)
         yy=y+65
         for row in rows:
-            label=('QQ '+connection(r.get('connected'))+' · 适配器不注册命令') if row['name']=='adapter' else (f"{row['active']} 个已注册功能" if row['active'] is not None else '框架未提供功能数量')
+            label=('连接 '+connection(r.get('connected'))+' · 适配器不注册命令') if row['name']=='adapter' else (f"{row['active']} 个已注册功能" if row['active'] is not None else '框架未提供功能数量')
             d.text((56,yy),row['label'][:22],24);d.text((610,yy),label,22,'#219271' if row['active'] or (row['name']=='adapter' and r.get('connected')) else '#a0772a')
             d.text((56,yy+30),row['name']+(' · v'+row['version'] if row['version'] else ''),19,'#758399');yy+=63
         d.text((56,yy+12),'功能已注册不代表每项外部API可用；上游额度、禁言等由对应服务决定。',18,'#758399')
@@ -263,7 +269,7 @@ def main():
         time.sleep(0.3)
 if __name__=='__main__':
     import argparse
-    parser=argparse.ArgumentParser(description='Yunzai on-demand Linux host image collector')
+    parser=argparse.ArgumentParser(description='ServerStatus on-demand Linux host image collector')
     parser.add_argument('--config',type=Path,required=True)
     parser.add_argument('--once',action='store_true',help='Process one request and exit')
     args=parser.parse_args()

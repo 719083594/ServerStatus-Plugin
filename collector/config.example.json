@@ -1,6 +1,6 @@
 {
-  "yunzaiRoot": "/srv/yunzai",
-  "ipcDirectory": "/srv/yunzai/data/yunzai-server-status",
+  "applicationRoot": "/srv/my-application",
+  "ipcDirectory": "/srv/my-application/data/server-status",
   "fontPath": null,
   "dockerMode": "auto",
   "containers": [],

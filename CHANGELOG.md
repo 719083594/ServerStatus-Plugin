@@ -1,5 +1,14 @@
 # 更新记录
 
+## 2.0.0
+
+- 重命名为 ServerStatus-Plugin，Linux 状态核心和 JSON/PNG CLI 可独立运行，无云崽安装前提。
+- JSON 模式仅使用 Python 标准库；添加 Node.js API 与通用适配协议，未提供的运行字段显示未知。
+- Yunzai 适配移至 integrations/yunzai；本地配置选择入口，不改公开源码，主人命令与限制保持。
+- 通用 applicationRoot 配置，兼容旧 yunzaiRoot 与 --yunzai-root；服务统一为 server-status.*。
+- 保留定时清理安全范围与默认关闭，通用应用目录不要求云崽标记，拒绝文件系统根目录。
+- 补充独立导入、无 Pillow JSON、通用安装和权限测试；维持原 PolyForm 非商业许可。
+
 ## 1.1.0
 
 - 增加可选宿主机定时清理：过期无引用镜像、构建缓存、临时文件与轮转日志。

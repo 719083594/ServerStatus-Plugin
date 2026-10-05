@@ -40,11 +40,9 @@ class FileCleanupTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        (self.root / 'lib/plugins').mkdir(parents=True)
-        (self.root / 'lib/plugins/plugin.js').write_text('framework')
         self.ipc = self.root / 'data/status'
         self.ipc.mkdir(parents=True)
-        self.config = {'yunzaiRoot': str(self.root), 'ipcDirectory': str(self.ipc),
+        self.config = {'applicationRoot': str(self.root), 'ipcDirectory': str(self.ipc),
                        'cleanup': {'enabled': True}}
         self.now = time.time()
 
@@ -105,6 +103,18 @@ class FileCleanupTests(unittest.TestCase):
         self.config['cleanup']['enabled'] = False
         with self.assertRaises(ValueError):
             c.run_cleanup(self.config, True)
+
+    def test_filesystem_root_rejected_without_docker(self):
+        self.config['applicationRoot']='/'
+        with self.assertRaises(ValueError):
+            c.run_cleanup(self.config,False,runner=lambda _:self.fail('Docker invoked'))
+
+    def test_legacy_application_root_retains_scope(self):
+        self.config['yunzaiRoot']=self.config.pop('applicationRoot')
+        old=self.old(self.root/'temp/old.tmp')
+        report=c.run_cleanup(self.config,False)
+        self.assertEqual(report['filesDeleted'],1)
+        self.assertTrue(old.exists())
 
     def test_failures_reported_and_unrelated_files_preserved(self):
         old = self.old(self.root / 'data/upload_tmp/old.tmp')

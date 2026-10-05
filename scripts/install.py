@@ -1,81 +1,88 @@
 #!/usr/bin/env python3
-"""Install local collector support. No server credentials, downloads, or shell eval."""
-import argparse,importlib.util,json,os,pwd,shutil,subprocess,sys
+"""Install ServerStatus host support; Yunzai is an explicitly selected integration."""
+import argparse,grp,importlib.util,json,os,pwd,shutil,subprocess,sys
 from pathlib import Path
-
 PACKAGE=Path(__file__).resolve().parent.parent
+
 def write_json(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    path.chmod(0o640)
+    path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8');path.chmod(0o640)
+
 def quote(value):
     value=str(value)
     if any(c in value for c in '\n\r\0%'):raise ValueError('Unsupported path character')
     return '"'+value.replace('\\','\\\\').replace('"','\\"')+'"'
-def dependencies(install):
-    if install:
-        if os.geteuid()!=0:raise ValueError('--install-deps requires root')
-        if not shutil.which('apt-get'):raise ValueError('Automatic dependencies only support Debian/Ubuntu; see docs/INSTALL.md')
-        subprocess.run(['apt-get','update'],check=True)
-        subprocess.run(['apt-get','install','-y','--no-install-recommends','python3-pil','fonts-wqy-microhei'],check=True)
-    if not importlib.util.find_spec('PIL'):raise ValueError('Pillow missing: sudo apt-get install python3-pil fonts-wqy-microhei')
-    fonts=['/usr/share/fonts/truetype/wqy/wqy-microhei.ttc','/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc']
-    return next((p for p in fonts if Path(p).is_file()),None)
+
 def main():
-    parser=argparse.ArgumentParser(description='Install host-side support for yunzai-server-status')
-    parser.add_argument('--yunzai-root',type=Path,required=True,help='HOST path to the Yunzai checkout')
-    parser.add_argument('--ipc-dir',type=Path,help='HOST path to the shared IPC directory')
-    parser.add_argument('--bot-ipc-dir',help='Path inside bot, only needed with a custom shared mount')
-    parser.add_argument('--bot-user',default=pwd.getpwuid(os.getuid()).pw_name)
-    parser.add_argument('--collector-user',help='Collector Unix user; default: bot-user')
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--application-root',type=Path,help='HOST application data root; no framework marker required')
+    parser.add_argument('--yunzai-root',type=Path,help='Legacy alias: selects the Yunzai integration')
+    parser.add_argument('--integration',choices=['standalone','yunzai'],default='standalone')
+    parser.add_argument('--ipc-dir',type=Path)
+    parser.add_argument('--bot-ipc-dir',help='Integration-visible shared mount path')
+    parser.add_argument('--application-user','--bot-user',dest='application_user',default=pwd.getpwuid(os.getuid()).pw_name)
+    parser.add_argument('--collector-user',help='Collector Unix user; default: application-user')
     parser.add_argument('--font-path',type=Path)
     parser.add_argument('--docker-mode',choices=['auto','selected','off'],default='auto')
-    parser.add_argument('--install-deps',action='store_true',help='Explicitly install distro Pillow/CJK font dependencies')
-    parser.add_argument('--systemd',action='store_true',help='Explicitly install and start a systemd service (requires root)')
-    parser.add_argument('--force-config',action='store_true',help='Explicitly replace existing local config')
+    parser.add_argument('--install-deps',action='store_true',help='Install distro Pillow/CJK font (Debian/Ubuntu, root)')
+    parser.add_argument('--systemd',action='store_true',help='Install/start server-status.service (root)')
+    parser.add_argument('--force-config',action='store_true',help='Explicitly replace existing config/service')
     args=parser.parse_args()
-    if sys.platform!='linux':raise ValueError('Host collector currently supports Linux only')
-    root=args.yunzai_root.expanduser().resolve()
-    if not (root/'package.json').is_file() or not (root/'lib/plugins/plugin.js').is_file():raise ValueError('Not a Yunzai-compatible framework root')
-    ipc=(args.ipc_dir or root/'data/yunzai-server-status').expanduser().resolve()
-    if args.bot_ipc_dir:bot_ipc=args.bot_ipc_dir
-    elif ipc.is_relative_to(root):bot_ipc=ipc.relative_to(root).as_posix()
-    else:raise ValueError('IPC is outside framework root; pass its bot-side --bot-ipc-dir explicitly')
+    if sys.platform!='linux':raise ValueError('Host collector supports Linux only')
+    if args.application_root and args.yunzai_root:raise ValueError('Select only one root argument')
+    selected=args.application_root or args.yunzai_root
+    if selected is None:raise ValueError('--application-root is required')
+    integration='yunzai' if args.yunzai_root else args.integration
+    root=selected.expanduser().resolve()
+    if not root.is_dir():raise ValueError('applicationRoot is not a directory')
+    if integration=='yunzai':
+        if not (root/'lib/plugins/plugin.js').is_file():raise ValueError('Missing Yunzai V3 integration interface')
+        if PACKAGE.parent!=root/'plugins':raise ValueError('Put the whole package directly under applicationRoot/plugins')
+    ipc=(args.ipc_dir or root/'data/server-status').expanduser().resolve()
     for p in [root,ipc,PACKAGE]:quote(p)
-    default_font=dependencies(args.install_deps)
-    font=str(args.font_path.resolve()) if args.font_path else default_font
-    if not font or not Path(font).is_file():raise ValueError('CJK font missing; install fonts-wqy-microhei or pass --font-path')
+    if args.install_deps:
+        if os.geteuid()!=0 or not shutil.which('apt-get'):raise ValueError('--install-deps requires root on Debian/Ubuntu')
+        subprocess.run(['apt-get','update'],check=True)
+        subprocess.run(['apt-get','install','-y','--no-install-recommends','python3-pil','fonts-wqy-microhei'],check=True)
+    if not importlib.util.find_spec('PIL'):raise ValueError('Pillow required for daemon PNG; JSON CLI needs no Pillow')
     from PIL import ImageFont
+    fonts=[args.font_path,'/usr/share/fonts/truetype/wqy/wqy-microhei.ttc','/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc']
+    font=next((str(Path(p).resolve()) for p in fonts if p and Path(p).is_file()),None)
+    if not font:raise ValueError('Chinese font missing; install fonts-wqy-microhei or pass --font-path')
     ImageFont.truetype(font,24)
-    bot=pwd.getpwnam(args.bot_user);collector=pwd.getpwnam(args.collector_user or args.bot_user)
-    if collector.pw_uid not in (0,bot.pw_uid):raise ValueError('Collector must run as the bot user or root to read its requests')
-    if os.geteuid()!=0 and os.getuid()!=bot.pw_uid:raise ValueError('Run as bot-user, or use sudo')
-    config_file=PACKAGE/'collector/config.json';plugin_file=PACKAGE/'config/plugin.json'
-    if not args.force_config and (config_file.exists() or plugin_file.exists()):raise ValueError('Local config exists; preserve it or explicitly pass --force-config')
-    target=Path('/etc/systemd/system/yunzai-server-status.service')
+    app=pwd.getpwnam(args.application_user);collector=pwd.getpwnam(args.collector_user or args.application_user)
+    if collector.pw_uid not in (0,app.pw_uid):raise ValueError('Collector must run as application-user or root')
+    if os.geteuid()!=0 and os.getuid()!=app.pw_uid:raise ValueError('Run as application-user or root')
+    config_file=PACKAGE/'collector/config.json';plugin_file=PACKAGE/'config/plugin.json';integration_file=PACKAGE/'config/integration.json'
+    files=[config_file,integration_file]+([plugin_file] if integration=='yunzai' else [])
+    if not args.force_config and any(p.exists() for p in files):raise ValueError('Config exists; preserve it or pass --force-config')
+    target=Path('/etc/systemd/system/server-status.service')
     if args.systemd:
         if os.geteuid()!=0 or not shutil.which('systemctl'):raise ValueError('--systemd requires root and systemd')
-        if target.exists() and not args.force_config:raise ValueError('Service already exists; not overwritten')
+        if target.exists() and not args.force_config:raise ValueError('Service exists; not overwritten')
+    if integration=='yunzai':
+        if args.bot_ipc_dir:bot_ipc=args.bot_ipc_dir
+        elif ipc.is_relative_to(root):bot_ipc=ipc.relative_to(root).as_posix()
+        else:raise ValueError('External IPC requires explicit --bot-ipc-dir')
     ipc.mkdir(parents=True,exist_ok=True)
-    if os.geteuid()==0:os.chown(ipc,bot.pw_uid,bot.pw_gid)
+    if os.geteuid()==0:os.chown(ipc,app.pw_uid,app.pw_gid)
     ipc.chmod(0o2770)
-    config={'yunzaiRoot':str(root),'ipcDirectory':str(ipc),'fontPath':font,'dockerMode':args.docker_mode,'containers':[],'storageDirectories':[],'storageCacheSeconds':60,'programCacheSeconds':3600}
-    write_json(config_file,config)
-    write_json(plugin_file,{'ipcDirectory':bot_ipc})
+    write_json(config_file,{'applicationRoot':str(root),'ipcDirectory':str(ipc),'fontPath':font,'dockerMode':args.docker_mode,'containers':[],'storageDirectories':[],'storageCacheSeconds':60,'programCacheSeconds':3600})
+    write_json(integration_file,{'adapter':'yunzai' if integration=='yunzai' else None})
+    if integration=='yunzai':
+        write_json(plugin_file,{'ipcDirectory':bot_ipc})
     if os.geteuid()==0:
-        for p in [config_file,plugin_file]:os.chown(p,bot.pw_uid,bot.pw_gid)
-    collector_path=PACKAGE/'collector/collector.py'
+        for p in files:os.chown(p,app.pw_uid,app.pw_gid)
     if args.systemd:
-        if os.geteuid()!=0 or not shutil.which('systemctl'):raise ValueError('--systemd requires root and systemd')
         unit=f'''[Unit]
-Description=Yunzai host status image collector
+Description=ServerStatus Linux host image collector
 After=docker.service
 
 [Service]
 Type=simple
 User={collector.pw_name}
-Group={pwd.getpwuid(bot.pw_uid).pw_name}
-ExecStart={quote(sys.executable)} {quote(collector_path)} --config {quote(config_file)}
+Group={grp.getgrgid(app.pw_gid).gr_name}
+ExecStart={quote(sys.executable)} {quote(PACKAGE/'collector/collector.py')} --config {quote(config_file)}
 Environment=TZ=Asia/Shanghai
 Restart=on-failure
 RestartSec=3
@@ -91,15 +98,12 @@ TasksMax=64
 [Install]
 WantedBy=multi-user.target
 '''
-        # Group is derived from gid (a username need not match its primary group).
-        import grp
-        unit=unit.replace('Group='+bot.pw_name,'Group='+grp.getgrgid(bot.pw_gid).gr_name)
         target.write_text(unit,encoding='utf-8');target.chmod(0o644)
         subprocess.run(['systemctl','daemon-reload'],check=True)
-        subprocess.run(['systemctl','enable','--now','yunzai-server-status.service'],check=True)
-    print('Collector config and shared IPC directory ready.')
-    print('Foreground command:',sys.executable,str(collector_path),'--config',str(config_file))
-    print('Next: restart your bot, then send #系统 as the configured owner.')
+        subprocess.run(['systemctl','enable','--now','server-status.service'],check=True)
+    print('Host configuration ready. Integration:',integration)
+    print('Foreground:',sys.executable,str(PACKAGE/'collector/collector.py'),'--config',str(config_file))
+    if integration=='yunzai':print('Integration marker selects Yunzai; code is unchanged. Restart bot, then send #系统 as owner.')
 if __name__=='__main__':
     try:main()
     except Exception as exc:print('Setup failed:',str(exc),file=sys.stderr);raise SystemExit(1)
