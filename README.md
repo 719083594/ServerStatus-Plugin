@@ -1,4 +1,6 @@
-# 云崽服务器状态图片插件
+<img src="resources/icon.png" width="72" height="72" alt="YunzaiServerStatus 图标">
+
+# YunzaiServerStatus · 服务器状态
 
 主人发送一条命令，返回 Linux 宿主机的 CPU、内存、磁盘、服务和插件状态图片。
 
@@ -98,3 +100,7 @@ CPU 采用宿主机全部核心平均占用（最高 100%）；容器 CPU 的 10
 采用 [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)。允许符合该许可证的非商业使用、复制、修改和再分发；分享时保留 `LICENSE` 和 `NOTICE`。商业使用需另行取得权利人许可，不能把它改成允许商用的授权。
 
 以 [LICENSE](LICENSE) 的完整条款为准；各外部依赖保留自己的许可证。
+
+## 插件列表信息
+
+插件列表显示名称为 `YunzaiServerStatus`，包含本地图标、作者和功能介绍。安装目录可以沿用原名；显示名称不影响命令或配置路径。
