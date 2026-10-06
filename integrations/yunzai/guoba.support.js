@@ -9,7 +9,7 @@ export function supportGuoba() {
     pluginInfo: {
       name: path.basename(directory).toLowerCase(),
       title: '服务器状态',
-      author: '@719083594',
+      author: 'OrangeJuice',
       authorLink: 'https://github.com/719083594',
       link: 'https://github.com/719083594/ServerStatus-Plugin',
       description: '主人专用服务器状态看板，展示 CPU、内存、存储、插件和服务状态。',
