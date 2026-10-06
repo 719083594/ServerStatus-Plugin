@@ -1,6 +1,6 @@
 {
   "name": "server-status-plugin",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "框架独立的 Linux 服务器状态采集、PNG 看板与安全定时缓存清理；附带 Yunzai 适配。",
   "type": "module",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -12,12 +12,14 @@
   "engines": {
     "node": ">=18"
   },
-  "exports": {".": "./index.js", "./core": "./lib/api.mjs", "./yunzai": "./integrations/yunzai/index.js"},
+  "main": "./api.mjs",
+  "exports": {".": "./api.mjs", "./core": "./lib/api.mjs", "./yunzai": "./integrations/yunzai/index.js"},
   "scripts": {
     "test": "node --test tests/*.test.mjs"
   },
   "files": [
     "index.js",
+    "api.mjs",
     "lib",
     "integrations",
     "collector/collector.py",

@@ -4,6 +4,23 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {pathToFileURL} from 'node:url'
+import {spawnSync} from 'node:child_process'
+
+test('package API stays pure when integration is enabled, and none explicitly disables commands',async()=>{
+ const temp=await fs.mkdtemp(path.join(os.tmpdir(),'serverstatus-entry-'))
+ try{
+  const target=path.join(temp,'isolated-status')
+  await fs.cp(new URL('../',import.meta.url),target,{recursive:true,filter:src=>!/[\\/](\.git|node_modules|__pycache__|data|dist)([\\/]|$)/.test(src)})
+  await fs.writeFile(path.join(target,'config/integration.json'),JSON.stringify({adapter:'yunzai'}))
+  const probe=path.join(target,'probe.mjs')
+  await fs.writeFile(probe,`import {collectSnapshot,createDashboard} from 'server-status-plugin'; if(typeof collectSnapshot!=='function'||typeof createDashboard!=='function'||globalThis.Bot)process.exit(1);`)
+  const result=spawnSync(process.execPath,[probe],{cwd:temp,encoding:'utf8',timeout:10000})
+  assert.equal(result.status,0,result.stderr)
+  await fs.writeFile(path.join(target,'config/integration.json'),JSON.stringify({adapter:'none'}))
+  const {apps}=await import(pathToFileURL(path.join(target,'index.js')))
+  assert.deepEqual(apps,{})
+ }finally{await fs.rm(temp,{recursive:true,force:true})}
+})
 test('standard V3 plugin export, master rule, and nonowner fail-closed',async()=>{
  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'yunzai-contract-'))
  try{

@@ -4,7 +4,7 @@
 
 框架独立的 **Linux 宿主机**状态采集、JSON 接口、PNG 看板与可选定时清理。附带 Yunzai V3 命令适配器；其他机器人框架可通过 CLI 或 Node.js API 接入。
 
-核心无云崽安装前提。独立 JSON CLI 只使用 Python 标准库；PNG 需要 Pillow 和中文字体。**通用核心不等于已提供所有框架的安装即用适配器**：当前现成适配器仅为 Yunzai V3，NoneBot、AstrBot 等需按[适配协议](docs/ADAPTERS.md)接入。宿主机采集不支持 Windows/macOS。
+独立 JSON CLI 使用 Python 标准库；PNG 使用 Pillow 和中文字体。**通用核心不等于已提供所有框架的安装即用适配器**：当前现成适配器仅为 Yunzai V3，NoneBot、AstrBot 等需按[适配协议](docs/ADAPTERS.md)接入。宿主机采集不支持 Windows/macOS。
 
 管理面板显示为“服务器状态”。2.0.1 补齐采集、清理、安装提示和采集器字段的中文说明，底层配置键与命令保持兼容。实际宿主机配置通过管理平台额外登记时，需同时使用插件声明中的中文字段定义。
 
@@ -29,12 +29,18 @@ python3 scripts/status.py --application-root /srv/my-application \
 `--kind` 可选 `all/resources/storage/plugins/services`。标准输出始终为 `{kind, generatedAt, details, dimensions?, pngPath?}` JSON；PNG 路径每次覆盖。可用 `--config collector/config.json` 指定 Docker、数据目录和字体配置；不传配置也能运行。`--runtime runtime.json` 可传框架的真实运行数据，不传则显示未知，不会把缺少在线状态当成离线。
 
 ```js
-import {collectSnapshot} from './index.js'
+import {collectSnapshot} from './api.mjs'
 const report = await collectSnapshot({kind:'resources'})
 console.log(report.details.memory)
 ```
 
 Node.js 18+ API 会调用本机 `python3`，没有 npm 第三方依赖。JSON 模式无需采集守护服务。PNG 的 `format:'both', output:'/tmp/status.png'` 会附带 `report.png` Buffer。
+
+## 插件组合与入口
+
+`api.mjs`、包默认导出和 `./core` 是纯数据接口；即使本实例已启用云崽适配，导入这些接口也不会注册机器人命令。其他应用可调用 `collectSnapshot()` 获取 JSON 或 PNG Buffer，再自行发送。`createDashboard()` 可连接本插件采集器，采集器和共享目录属于本插件部署的一部分。
+
+`index.js` 仅供机器人加载命令；`config/integration.json` 中 `adapter:"none"` 可显式关闭适配器。独立采集不调用 AI、搜索或 OrangeJuice。管理面板只编辑已登记配置，不参与采集与回复。
 
 ## Yunzai 安装
 
