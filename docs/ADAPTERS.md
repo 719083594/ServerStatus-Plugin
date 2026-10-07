@@ -20,6 +20,16 @@ HTTP/机器人适配器负责鉴权：系统指标、容器名和插件信息属
 
 `runtimeFrom({loader,bot,files,processInfo})` 是可选的 Node.js 结构转换工具，不会导入框架。Yunzai 的实际字段采集只在 `integrations/yunzai/runtime.mjs`。其他框架可以直接构造 runtime JSON，不必实现 Yunzai 的 loader。
 
+## 依赖组件展示
+
+主插件可在自己的公开 `orangejuice.plugin.json` 声明资源或模型组件：
+
+```json
+{"components":[{"directory":"guide-assets","title":"资料图片","description":"供主插件调用的公共图片素材"}]}
+```
+
+只有主插件在当前 runtime 中有正数 `active`、组件也存在且 `active` 为数值 `0`、目录名称安全、归属唯一时，状态图才把组件收进主插件下方的“依赖组件”说明。组件版本仍来自自己的公开 `package.json`。活跃组件、未知状态、重复声明或归属冲突继续独立显示；框架的 `system`、`other`、`adapter`、`example` 不会收纳。面板功能和任务总数保持框架实际提供的数值，不因展示归并改变。此声明仅整理展示，不移动目录、不卸载或停用功能。
+
 ## 当前支持情况
 
 - Linux CLI、Python 采集核心与 Node.js API：无需 Yunzai。

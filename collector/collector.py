@@ -1,5 +1,5 @@
 """On-demand host metrics; optional cleanup runs in a separate host timer."""
-import json, os, re, subprocess, sys, time, threading
+import json, math, os, re, subprocess, sys, time, threading
 from datetime import datetime
 from pathlib import Path
 
@@ -129,19 +129,80 @@ def services():
     except Exception:result.append({'name':'Docker监测','error':'Docker 不可用或权限不足；宿主机资源仍可查看'})
     return result
 
+BUILTIN_PLUGINS={'system','adapter','other','example'}
+
+def plugin_name(value):
+    return isinstance(value,str) and bool(re.fullmatch(r'[A-Za-z0-9_-][A-Za-z0-9_.-]{0,79}',value))
+
+def public_plugin_json(name,filename):
+    """Read bounded public metadata; never follow a component outside plugins."""
+    if not plugin_name(name):return {}
+    directory=ROOT/'plugins'/name;p=directory/filename
+    try:
+        if directory.is_symlink() or directory.resolve().parent!=(ROOT/'plugins').resolve() or p.is_symlink() or not p.is_file():return {}
+        if p.stat().st_size>256*1024:return {}
+        value=json.loads(p.read_text(encoding='utf-8'))
+        return value if isinstance(value,dict) else {}
+    except (OSError,ValueError):return {}
+
+def display_text(value,limit):
+    return ' '.join(value.split())[:limit] if isinstance(value,str) else ''
+
+def known_count(value):
+    return type(value) is int or type(value) is float and math.isfinite(value)
+
 def plugins(runtime):
     rows=[]
     names={'system':'TRSS 系统功能','adapter':'OneBot 适配器','other':'TRSS 辅助功能','example':'示例插件','chatgpt-plugin':'GPT 聊天插件','Guoba-Plugin':'锅巴管理面板','ServerStatus-Plugin':'服务器状态','WebSearch-Plugin':'联网搜索','OrangeJuice-Plugin':'橙汁管理平台','AI-Plugin':'AI 聊天'}
-    for item in runtime.get('plugins',[])[:50]:
-        name=str(item.get('name',''))
-        if not re.fullmatch(r'[A-Za-z0-9_.-]{1,80}',name):continue
+    entries=runtime.get('plugins',[])
+    if not isinstance(entries,list):return rows
+    for item in entries[:50]:
+        if not isinstance(item,dict):continue
+        name=item.get('name','')
+        if not plugin_name(name):continue
         version=str(item.get('version',''))[:40]
-        p=ROOT/'plugins'/name/'package.json'
-        if p.is_file():
-            try:version=str(json.loads(p.read_text()).get('version',''))[:40]
-            except Exception:pass
-        rows.append({'name':name,'label':str(item.get('label',names.get(name,name)))[:40],'version':version,'loaded':item.get('loaded'),'active':item.get('active')})
-    return rows
+        package=public_plugin_json(name,'package.json')
+        if package:version=display_text(str(package.get('version','')),40)
+        manifest=public_plugin_json(name,'orangejuice.plugin.json')
+        label=display_text(item.get('label'),40) or display_text(manifest.get('title'),40) or display_text(names.get(name,name),40)
+        rows.append({'name':name,'label':label,'version':version,'loaded':item.get('loaded'),'active':item.get('active')})
+    if len(entries)>50:return rows
+    # A zero command count says nothing about imported models or image assets.
+    # Only an explicit, unambiguous declaration may group an idle component.
+    by_name={};claims={}
+    for row in rows:by_name.setdefault(row['name'],[]).append(row)
+    for parent in rows:
+        if parent['name'] in BUILTIN_PLUGINS:continue
+        declared=public_plugin_json(parent['name'],'orangejuice.plugin.json').get('components',[])
+        if not isinstance(declared,list):continue
+        if len(declared)>50:return rows
+        for item in declared:
+            if not isinstance(item,dict):continue
+            name=item.get('directory')
+            if not plugin_name(name) or name==parent['name'] or name in BUILTIN_PLUGINS:continue
+            claims.setdefault(name,[]).append((parent,item))
+    grouped=set()
+    for name,owners in claims.items():
+        if len(owners)!=1 or len(by_name.get(name,[]))!=1:continue
+        parent,definition=owners[0];child=by_name[name][0]
+        if not known_count(parent['active']) or parent['active']<=0 or not known_count(child['active']) or child['active']!=0:continue
+        parent.setdefault('components',[]).append({'name':name,'label':display_text(definition.get('title'),40) or child['label'],
+            'description':display_text(definition.get('description'),160),'version':child['version']})
+        grouped.add(name)
+    return [row for row in rows if row['name'] not in grouped]
+
+def plugin_component_lines(row,width=968,px=18):
+    components=row.get('components',[])
+    if not components:return []
+    from PIL import ImageFont
+    font=ImageFont.truetype(FONT,px)
+    content='依赖组件：'+'；'.join(item['label']+'（'+item['name']+(' · v'+item['version'] if item['version'] else '')+'）' for item in components)
+    lines=[];line=''
+    for character in content:
+        if line and font.getlength(line+character)>width:lines.append(line);line=''
+        line+=character
+    if line:lines.append(line)
+    return lines
 
 def collect(request):
     if sys.platform!='linux':raise ValueError('宿主机状态采集仅支持 Linux')
@@ -235,12 +296,16 @@ def render(data,kind,target):
             d.text((56,yy+35),f"内存 {row['memory']} ({row['memoryPercent']})   进程 {row['pids']}   重启 {row['restarts']}次",20,'#758399');yy+=78
         d.text((56,yy+8),'内存数字为 Docker 统计口径；不能和宿主机占用直接相加。',18,'#758399')
     if kind in {'all','plugins'}:
-        rows=data['plugins'];y=d.section(f"插件 · 已加载 {count_text(r.get('loadedCount'))} 个功能 / {count_text(r.get('taskCount'))} 个定时任务",135+len(rows)*63)
+        rows=data['plugins'];details=[plugin_component_lines(row) for row in rows]
+        y=d.section(f"插件 · 已加载 {count_text(r.get('loadedCount'))} 个功能 / {count_text(r.get('taskCount'))} 个定时任务",135+len(rows)*63+sum(len(lines)*27+8 for lines in details if lines))
         yy=y+65
-        for row in rows:
+        for row,lines in zip(rows,details):
             label=('连接 '+connection(r.get('connected'))+' · 适配器不注册命令') if row['name']=='adapter' else (f"{row['active']} 个已注册功能" if row['active'] is not None else '框架未提供功能数量')
             d.text((56,yy),row['label'][:22],24);d.text((610,yy),label,22,'#219271' if row['active'] or (row['name']=='adapter' and r.get('connected')) else '#a0772a')
             d.text((56,yy+30),row['name']+(' · v'+row['version'] if row['version'] else ''),19,'#758399');yy+=63
+            for line in lines:
+                d.text((56,yy),line,18,'#758399');yy+=27
+            if lines:yy+=8
         d.text((56,yy+12),'功能已注册不代表每项外部API可用；上游额度、禁言等由对应服务决定。',18,'#758399')
     return d.finish(target)
 
