@@ -37,7 +37,11 @@ test('standard V3 plugin export, master rule, and nonowner fail-closed',async()=
   assert.equal(typeof core.collectSnapshot,'function')
   const instance=new ServerStatus();assert.equal(instance.rule[0].permission,'master')
   for(const cmd of ['系统','服务器','资源','插件','存储','服务','系统帮助'])for(const prefix of ['#','/'])assert.ok(instance.rule[0].reg.test(prefix+cmd))
+  assert.ok(instance.rule[0].reg.test('#系统帮助 文字'))
+  assert.equal(instance.rule[0].reg.test('#资源 文字'),false)
   assert.equal(instance.init,undefined) // public build adds no management endpoints
   let replies=0;await instance.status({isMaster:false,msg:'#系统',reply:()=>{replies++}});assert.equal(replies,0)
+  const helpReplies=[];await instance.status({isMaster:true,msg:'#系统帮助',reply:value=>{helpReplies.push(value)}})
+  assert.equal(helpReplies.length,1);assert.match(helpReplies[0],/系统状态插件/) // Missing AI sibling falls back safely.
  }finally{await fs.rm(temp,{recursive:true,force:true})}
 })
