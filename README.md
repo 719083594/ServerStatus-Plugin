@@ -1,14 +1,37 @@
-<img src="resources/icon.png" width="72" height="72" alt="ServerStatus-Plugin 图标">
-
 # ServerStatus-Plugin · 服务器状态
+
+![ServerStatus-Plugin：服务器状态看板](docs/images/hero.svg)
+
+**资源、存储与服务状态，按需汇成一张图。** 面向 Linux 宿主机，提供 JSON / PNG 与现成的云崽主人命令。
+
+[效果预览](#效果预览) · [独立运行](#独立运行) · [Yunzai 安装](#yunzai-安装) · [定时清理](#定时清理) · [完整安装](docs/INSTALL.md) · [安全说明](SECURITY.md)
+
+| 看得清的运行状态 | 程序与聊天都能用 | 清理规则明确 |
+| --- | --- | --- |
+| CPU、内存、Swap、存储、插件与容器，按面板查看。 | 独立 JSON / PNG 接口；Yunzai V3 命令默认仅主人可用。 | 定时清理默认关闭，支持预览；固定范围与保留项有完整说明。 |
+
+## 效果预览
+
+![ServerStatus 原生资源看板演示：CPU、内存、Swap 与应用运行信息](docs/images/showcase.png)
+
+> **全部为演示数据。** 指标、应用状态和主机均为手工虚构，时间固定；脚本只调用项目现有 PNG renderer，没有读取真实主机、生产配置或凭据。
+
+<details>
+<summary>展开服务状态示例与复现方法</summary>
+
+![服务状态的手工演示数据：demo-bot、demo-cache 与 demo-worker](docs/images/services-demo.png)
+
+原生资源图见 [resources-demo.png](docs/images/resources-demo.png)。安装 Pillow 和中文字体后，在仓库目录运行 `python scripts/generate-readme-demo.py`；可通过 `--font 字体路径` 指定字体。仅渲染内置 fixture，可在 Windows 上生成演示图；实际宿主机采集仍仅支持 Linux。
+
+</details>
+
+### 运行边界与兼容
 
 框架独立的 **Linux 宿主机**状态采集、JSON 接口、PNG 看板与可选定时清理。附带 Yunzai V3 命令适配器；其他机器人框架可通过 CLI 或 Node.js API 接入。
 
 独立 JSON CLI 使用 Python 标准库；PNG 使用 Pillow 和中文字体。**通用核心不等于已提供所有框架的安装即用适配器**：当前现成适配器仅为 Yunzai V3，NoneBot、AstrBot 等需按[适配协议](docs/ADAPTERS.md)接入。宿主机采集不支持 Windows/macOS。
 
 管理面板显示为“服务器状态”。2.0.1 补齐采集、清理、安装提示和采集器字段的中文说明，底层配置键与命令保持兼容。实际宿主机配置通过管理平台额外登记时，需同时使用插件声明中的中文字段定义。
-
-![合成示例，非真实服务器数据](docs/preview.png)
 
 ## 独立运行
 
